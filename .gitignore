@@ -160,3 +160,13 @@ cython_debug/
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+
+data_pipe/download_data.py
+data_pipe/macro.ipynb
+data_pipe/test.ipynb
+
+*.code-workspace
+
+*.sh
+
+*.ipynb
