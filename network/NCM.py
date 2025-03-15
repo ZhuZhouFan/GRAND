@@ -129,3 +129,25 @@ def proj_spd(A):
     A = (v * np.maximum(d, 0)).dot(v.T)
     A = (A + A.T) / 2
     return(A)
+
+def cov2cor(covariance_mat):
+    cor_mat = np.zeros_like(covariance_mat)
+    variances = np.diagonal(covariance_mat)
+    rows, cols = np.where(covariance_mat)
+    for i in range(len(rows)):
+        row = rows[i]
+        col = cols[i]
+        cor_mat[row, col] = covariance_mat[row, col] / \
+            np.sqrt(variances[row] * variances[col])
+    return cor_mat
+
+
+def cor2cov(correlation_mat, variances):
+    cov_mat = np.zeros_like(correlation_mat)
+    rows, cols = np.where(correlation_mat)
+    for i in range(len(rows)):
+        row = rows[i]
+        col = cols[i]
+        cov_mat[row, col] = correlation_mat[row, col] * \
+            np.sqrt(variances[row] * variances[col])
+    return cov_mat

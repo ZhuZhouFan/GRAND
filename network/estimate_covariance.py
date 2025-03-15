@@ -5,7 +5,7 @@ import pandas as pd
 import torch
 from joblib import Parallel, delayed
 from model import SGA, MLP
-from NCM import nearcorr
+from NCM import nearcorr, cor2cov, cov2cor
 from QCM import QCM_regression
 from infer import infer
 from tqdm import tqdm
@@ -35,30 +35,6 @@ def obtain_valid_stock_list(kline_day_path, start_time, end_time,
         if (df.isna().sum().max()) < (null_patience * df.shape[0]):
             valid_stock_list.append(stock_name)
     return np.array(valid_stock_list)
-
-
-def cov2cor(covariance_mat):
-    cor_mat = np.zeros_like(covariance_mat)
-    variances = np.diagonal(covariance_mat)
-    rows, cols = np.where(covariance_mat)
-    for i in range(len(rows)):
-        row = rows[i]
-        col = cols[i]
-        cor_mat[row, col] = covariance_mat[row, col] / \
-            np.sqrt(variances[row] * variances[col])
-    return cor_mat
-
-
-def cor2cov(correlation_mat, variances):
-    cov_mat = np.zeros_like(correlation_mat)
-    rows, cols = np.where(correlation_mat)
-    for i in range(len(rows)):
-        row = rows[i]
-        col = cols[i]
-        cov_mat[row, col] = correlation_mat[row, col] * \
-            np.sqrt(variances[row] * variances[col])
-    return cov_mat
-
 
 def estimate_covariance(sender, receiver,
                         feature, tau_list,
