@@ -1,1 +1,1 @@
-project_path = '/home/zfzhu/Data/CDCC_data'
+project_path = '/DATA/zhuzhoufan/GRAND_data'

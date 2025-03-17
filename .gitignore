@@ -164,7 +164,7 @@ cython_debug/
 data_pipe/download_data.py
 data_pipe/macro.ipynb
 data_pipe/test.ipynb
-# config
+config
 logs
 
 *.code-workspace

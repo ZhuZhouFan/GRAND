@@ -84,21 +84,27 @@ class GRANDSimulation:
         selected_columns = non_zero_counts > 1
         topK_similarity_mat_ = topK_similarity_mat[:, selected_columns]
         
-        adj_mats = torch.zeros([self.N, self.N, topK_similarity_mat_.shape[1]])
+        # adj_mats = torch.zeros([self.N, self.N, topK_similarity_mat_.shape[1]])
+        adj_mat = torch.zeros([self.N, self.N])
         for concept_idx in range(topK_similarity_mat_.shape[1]):
             non_zero_idx = topK_similarity_mat_[:, concept_idx]
             connected_stocks = torch.where(non_zero_idx)[0]
 
             for j, sender in enumerate(connected_stocks[:-1]):
                 receiver = connected_stocks[j+1]
-                adj_mats[sender, receiver, concept_idx] = 1
-                adj_mats[receiver, sender, concept_idx] = 1
+                # adj_mats[sender, receiver, concept_idx] = 1
+                # adj_mats[receiver, sender, concept_idx] = 1
+                adj_mat[sender, receiver, concept_idx] = 1
+                adj_mat[receiver, sender, concept_idx] = 1
         
         # adj_matrix_sum = adj_mats.sum(dim=-1)
         # row_sums = adj_matrix_sum.sum(dim=1, keepdim=True)
         # W_t = 0.1 * adj_matrix_sum / row_sums
         
-        W_t = adj_mats.mean(axis = -1)
+        # W_t = adj_mats.mean(axis = -1)
+        # W_t[W_t > 0] = 1
+        
+        W_t = adj_mat
         
         return W_t.numpy()
 
@@ -171,7 +177,6 @@ def subjob(args, seed):
     os.environ["MKL_NUM_THREADS"] = "1"
     os.environ["OPENBLAS_NUM_THREADS"] = "1"
     os.environ["NUMEXPR_NUM_THREADS"] = "1"
-    
     torch.set_num_threads(1)
     
     simulator = GRANDSimulation(N=args.N,
@@ -209,25 +214,23 @@ def subjob(args, seed):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='GRAND Simulator Hyperparameters')
-    parser.add_argument('--N', type=int, default=200, help='Number of assets')
-    parser.add_argument('--T', type=int, default=600,help='Number of time periods')
-    parser.add_argument('--alpha', type=float, default=0.75,
-                        help='Alpha parameter')
-    parser.add_argument('--beta', type=float, default=0.75,
-                        help='Beta parameter')
-    parser.add_argument('--gamma', type=float, default=0.2,
-                        help='Gamma parameter')
-    parser.add_argument('--delta', type=float, default=0.2,
-                        help='Delta parameter')
-    parser.add_argument('--zeta', type=float, default=0.2,
-                        help='zeta parameter')
-    parser.add_argument('--K_star', type=int, default=3,
-                        help='Number of top nodes for adjacency')
-    # parser.add_argument('--seed', type=int, default=42, help='Random seed')
-    parser.add_argument('--burnin', type=int, default=100,
-                        help='Burn-in period for simulation')
-    parser.add_argument('--lag', type=int, default=48, help='Number of lagged value of each feature')
+    parser.add_argument('--N', type=int, default=200, help='Number of assets in the simulation')
+    parser.add_argument('--T', type=int, default=600, help='Number of time periods for the simulation')
+    parser.add_argument('--alpha', type=float, default=0.8, help='Alpha parameter, controlling the asset return dynamics')
+    parser.add_argument('--beta', type=float, default=0.025, help='Beta parameter, influencing the asset correlation structure')
+    parser.add_argument('--gamma', type=float, default=0.1, help='Gamma parameter, affecting the idiosyncratic variance')
+    parser.add_argument('--delta', type=float, default=0.2, help='Delta parameter, influencing the cross-sectional covariance')
+    parser.add_argument('--zeta', type=float, default=0.2, help='Zeta parameter, controlling the correlation decay rate')
+    parser.add_argument('--K_star', type=int, default=3, help='Number of top nodes used for adjacency matrix construction')
+    # parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
+    parser.add_argument('--burnin', type=int, default=100, help='Burn-in period to discard initial simulation data')
+    parser.add_argument('--lag', type=int, default=48, help='Number of lagged values to use for each feature')
+    parser.add_argument('--rep', type=int, default=100, help='Number of Monte Carlo repetitions for the simulation')
+    parser.add_argument('--cpu', type=int, default=20, help='Number of CPUs')
     args = parser.parse_args()
-
-
-    Parallel(n_jobs=20)(delayed(subjob)(args, seed) for seed in tqdm([x for x in range(100)]))
+    
+    Parallel(n_jobs=args.cpu)(delayed(subjob)(args, seed) for seed in tqdm([x for x in range(args.rep)]))
+    
+    # for seed in tqdm([x for x in range(100)]):
+    #     subjob(args, seed)
+    #     break
