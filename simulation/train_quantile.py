@@ -1,26 +1,11 @@
 import torch
 import pandas as pd
-import numpy as np
 import argparse
-import os
+import sys
+sys.path.append('.')
 
-from agent import SGA_agent
-
-def fetch_basic_attributes(tensor_path,
-                           start_time,
-                           end_time):
-    
-    dates = np.array(os.listdir(tensor_path))
-    avaible_dates = dates[(dates >= start_time) & (dates <= end_time)]
-    avaible_dates.sort()
-    valid_time = avaible_dates[round(len(avaible_dates) * 0.8)]
-
-    feature = np.load(f'{tensor_path}/{dates[0]}/feature.npy')
-    N = feature.shape[0]
-    P = feature.shape[-1]
-    
-    return N, P, valid_time
-    
+from config import project_path
+from network.agent import SGA_agent
 
 if __name__ == '__main__':
 
@@ -28,7 +13,7 @@ if __name__ == '__main__':
     ## arguments related to training ##
     parser.add_argument('--epochs', type=int, default=1000,
                         help='Number of epochs to train.')
-    parser.add_argument('--lr', type=float, 
+    parser.add_argument('--lr', type=float, default=5e-4, 
                         help='Learning rate.')
     parser.add_argument('--patience', type=int, default=30,
                         help='Early stopping patience')
@@ -36,8 +21,9 @@ if __name__ == '__main__':
                         help='Dropout rate (1 - keep probability).')
     parser.add_argument('--workers', type=int, default=3,
                         help='Number of workers in Dataloader')
-    parser.add_argument('--lag', type=int, 
+    parser.add_argument('--lag', type=int, default=48,
                         help='Number of lagged value of each feature')
+    
     
     ## arguments related to loss function ##
     parser.add_argument('--mse-loss', action='store_true', default=False,
@@ -52,34 +38,32 @@ if __name__ == '__main__':
                         help='Random seed.')
 
     ## arguments related to changing the model ##
-    parser.add_argument('--hidden', type=int,
+    parser.add_argument('--hidden', type=int, default=64,
                         help='Number of hidden units in encoder.')
 
     ## Saving, loading etc. ##
-    parser.add_argument('--cuda', type=int, 
+    parser.add_argument('--cuda', type=int,
                         help='Number of GPU device training on.')
-    parser.add_argument('--data-folder', type=str,
-                         help='Path to your data folder')
-    parser.add_argument('--start-time', type=str, default='2010-01-01',
-                        help='Beginning of in-sample dataset')
-    parser.add_argument('--end-time', type=str, default='2018-12-31',
-                        help='Ending of in-sample dataset')
-
+    parser.add_argument('--N', type=int, default=2000, help='Number of assets in the simulation')
+    parser.add_argument('--T', type=int, default=600, help='Number of time periods for the simulation')
+    parser.add_argument('--K', type=int, default=3, help='Number of top nodes used for adjacency matrix construction')
+    parser.add_argument('--dseed', type=int, default=0, help='Random seed for DGP')
     args = parser.parse_args()
 
     torch.cuda.set_device(args.cuda)
-    start_time = args.start_time
-    end_time = args.end_time
     tau = args.tau
     num_workers = args.workers
-    data_path = args.data_folder
     lag_order = args.lag
+    N = args.N
+    T = args.T
+    K_star = args.K
+    data_seed = args.dseed
     
-    tensor_path = f'{data_path}/tensor/lag_{lag_order}_horizon_1'
-    N, P, valid_time = fetch_basic_attributes(tensor_path, start_time, end_time)
-    log_dir = f'{data_path}/quantile_model/hidden_{args.hidden}_lr_{args.lr}_lag_{lag_order}_horizon_1'
+    tensor_path = f'{project_path}/simulated_tensor/{N}_{T}_{K_star}_{data_seed}'
     
-    K_list = [x+1 for x in range(20)]
+    log_dir = f'{project_path}/simulated_quantile_model/{N}_{T}_{K_star}_{data_seed}/hidden_{args.hidden}_lr_{args.lr}_lag_{lag_order}_horizon_1'
+    
+    K_list = [K_star]
     result_df = pd.DataFrame(columns=['K', 'best_score', 'best_cr'])
     result_df['K'] = K_list
     result_df.set_index('K', inplace=True)
@@ -87,16 +71,15 @@ if __name__ == '__main__':
     for K in K_list:
         log_dir_ = f'{log_dir}/{tau}/{K}'
         agent = SGA_agent(individual_num=N,
-                           feature_dim=P,
+                           feature_dim=4,
                            hidden_dim=args.hidden,
                            K=K,
                            log_dir=log_dir_,
                            learning_rate=args.lr,
                            seed=args.seed,
                            )
-        agent.load_data(tensor_path, start_time, valid_time, end_time, num_workers)
-        agent.train(tau=tau, epoch=args.epochs,
-                    lambda_=args.lam, mse_loss=args.mse_loss)
+        agent.load_data(tensor_path, str(0), str(200), str(400), num_workers)
+        agent.train(tau=tau, epoch=args.epochs, lambda_=args.lam, mse_loss=args.mse_loss)
 
         result_df.loc[K, 'best_score'] = agent.best_score
         result_df.loc[K, 'best_cr'] = agent.best_cr

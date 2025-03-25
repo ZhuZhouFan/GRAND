@@ -2,7 +2,8 @@ import pandas as pd
 from scipy import stats
 import numpy as np
 import statsmodels.api as sm
-from hypothesis_test import Kupic_test, Christofer_test
+
+from network.hypothesis_test import Kupic_test, Christofer_test
 
 def re_arrange(stock_name, tau_list, inference_dict):
     tau_dict = dict.fromkeys(tau_list, 0)

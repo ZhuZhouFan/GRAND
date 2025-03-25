@@ -8,8 +8,10 @@ from torch.utils.data import DataLoader
 from torch.optim import Adam
 import torch.nn.functional as F
 
-from model import SGA
-from dataset import SGA_Dataset
+import sys
+sys.path.append('.')
+from network.model import SGA
+from network.dataset import SGA_Dataset
 
 
 class SGA_agent(object):

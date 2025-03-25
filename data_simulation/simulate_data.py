@@ -19,7 +19,7 @@ class GRANDSimulation:
                  zeta=0.2,
                  gamma=0.6,
                  delta=0.9,
-                 K_star=5,
+                 K=5,
                  seed=42,
                  burnin=300):
 
@@ -36,14 +36,14 @@ class GRANDSimulation:
         self.delta = delta
         self.zeta = zeta
 
-        self.K_star = K_star
+        self.K = K
 
         self.rho_k = np.random.uniform(0.8, 1, size=3)
         self.Z = np.zeros((N, T + burnin, 3))
         self.r = np.zeros((N, T + burnin))
         self.epsilon = np.random.normal(0, 1, (N, T + burnin))
 
-        self.mask_row = torch.linspace(0, N - 1, N).reshape([-1, 1]).repeat(1, K_star).reshape(1, -1).long()
+        self.mask_row = torch.linspace(0, N - 1, N).reshape([-1, 1]).repeat(1, K).reshape(1, -1).long()
         self.off_diagonal_mat = (torch.ones(N, N) - torch.eye(N))
 
     def alpha_function(self, z, r_prev):
@@ -74,7 +74,7 @@ class GRANDSimulation:
         similarity_mat = self.cal_cos_similarity(z_, z_)
         similarity_mat = similarity_mat * self.off_diagonal_mat
 
-        mask_column = torch.topk(similarity_mat, self.K_star, dim=1)[1].reshape(1, -1)
+        mask_column = torch.topk(similarity_mat, self.K, dim=1)[1].reshape(1, -1)
         mask = torch.zeros([self.N, self.N])
         mask[self.mask_row, mask_column] = 1
         topK_similarity_mat = similarity_mat * mask
@@ -94,8 +94,8 @@ class GRANDSimulation:
                 receiver = connected_stocks[j+1]
                 # adj_mats[sender, receiver, concept_idx] = 1
                 # adj_mats[receiver, sender, concept_idx] = 1
-                adj_mat[sender, receiver, concept_idx] = 1
-                adj_mat[receiver, sender, concept_idx] = 1
+                adj_mat[sender, receiver] = 1
+                adj_mat[receiver, sender] = 1
         
         # adj_matrix_sum = adj_mats.sum(dim=-1)
         # row_sums = adj_matrix_sum.sum(dim=1, keepdim=True)
@@ -173,12 +173,6 @@ class GRANDSimulation:
 
 def subjob(args, seed):
     
-    os.environ["OMP_NUM_THREADS"] = "1"
-    os.environ["MKL_NUM_THREADS"] = "1"
-    os.environ["OPENBLAS_NUM_THREADS"] = "1"
-    os.environ["NUMEXPR_NUM_THREADS"] = "1"
-    torch.set_num_threads(1)
-    
     simulator = GRANDSimulation(N=args.N,
                                 T=args.T,
                                 alpha=args.alpha,
@@ -186,13 +180,13 @@ def subjob(args, seed):
                                 gamma=args.gamma,
                                 delta=args.delta,
                                 zeta=args.zeta,
-                                K_star=args.K_star,
+                                K=args.K,
                                 seed=seed,
                                 burnin=args.burnin)
 
     r, Z, epsilon, Sigmas, graphs = simulator.simulate()
     
-    save_log = f'{project_path}/simulated_tensor/{args.N}_{args.T}_{args.K_star}_{seed}'
+    save_log = f'{project_path}/simulated_tensor/{args.N}_{args.T}_{args.K}_{seed}'
 
     for t in range(args.burnin, args.burnin + args.T):
         r_prev = np.expand_dims(r[:, t-args.lag:t], axis = -1)
@@ -221,7 +215,7 @@ if __name__ == '__main__':
     parser.add_argument('--gamma', type=float, default=0.1, help='Gamma parameter, affecting the idiosyncratic variance')
     parser.add_argument('--delta', type=float, default=0.2, help='Delta parameter, influencing the cross-sectional covariance')
     parser.add_argument('--zeta', type=float, default=0.2, help='Zeta parameter, controlling the correlation decay rate')
-    parser.add_argument('--K_star', type=int, default=3, help='Number of top nodes used for adjacency matrix construction')
+    parser.add_argument('--K', type=int, default=3, help='Number of top nodes used for adjacency matrix construction')
     # parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
     parser.add_argument('--burnin', type=int, default=100, help='Burn-in period to discard initial simulation data')
     parser.add_argument('--lag', type=int, default=48, help='Number of lagged values to use for each feature')
@@ -229,8 +223,11 @@ if __name__ == '__main__':
     parser.add_argument('--cpu', type=int, default=20, help='Number of CPUs')
     args = parser.parse_args()
     
-    Parallel(n_jobs=args.cpu)(delayed(subjob)(args, seed) for seed in tqdm([x for x in range(args.rep)]))
+    # Parallel(n_jobs=args.cpu)(delayed(subjob)(args, seed) for seed in tqdm([x for x in range(args.rep)]))
     
-    # for seed in tqdm([x for x in range(100)]):
-    #     subjob(args, seed)
-    #     break
+    for seed in tqdm([x for x in range(args.rep)]):
+        
+        if seed < 2: 
+            continue
+        else:
+            subjob(args, seed)

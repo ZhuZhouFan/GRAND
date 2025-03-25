@@ -5,10 +5,12 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 from torch.optim import Adam
 import torch.nn.functional as F
-from dataset import SGA_Dataset
 from torch.utils.data import DataLoader
 
-from model import SGA, MLP
+import sys
+sys.path.append('.')
+from network.model import SGA, MLP
+from network.dataset import SGA_Dataset
 
 
 class mlp_agent(object):
