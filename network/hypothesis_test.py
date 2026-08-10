@@ -1,3 +1,12 @@
+"""
+Kupiec and Christoffersen tests for screening estimated conditional quantiles.
+
+Inputs: predicted quantile series, realized returns, and target level ``tau``.
+Operations: compute likelihood-ratio statistics for unconditional coverage
+(Kupiec) and independence plus coverage (Christoffersen).
+Outputs: scalar test statistics consumed by QCM pre-screening in ``QCM.test``.
+"""
+
 import numpy as np
 
 def Kupic_test(prediction, ground_truth, tau):

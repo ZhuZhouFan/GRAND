@@ -1,3 +1,16 @@
+"""
+Neural network definitions for GRAND: self-grouping autoencoder (SGA) and the
+node-fusion MLP.
+
+Inputs: cross-sectional lagged feature tensors of shape ``[N, S, P]`` (SGA) or
+concatenated pair features of shape ``[1, S, 2P]`` (MLP).
+Operations: SGA encodes temporal features with a GRU, builds a top-``K`` sparse
+similarity graph, and produces per-stock predictions; MLP maps fused pair
+features back to dimension ``P``.
+Outputs: SGA returns predictions of shape ``[N]`` (and optional adjacency via
+``encode_graph``); MLP returns fused vertex features of shape ``[1, S, P]``.
+"""
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -36,7 +49,7 @@ class SGA(nn.Module):
         self.fc_indi = nn.Linear(hidden_dim, hidden_dim)
 
         self.leaky_relu = nn.LeakyReLU(0.2)
-        self.softmax_t2s = nn.Softmax(dim = 0)
+        self.softmax_t2s = nn.Softmax(dim = 1)
         
         self.fc_out_hs = nn.Linear(hidden_dim, 1)
         self.fc_out_indi = nn.Linear(hidden_dim, 1)
@@ -64,7 +77,7 @@ class SGA(nn.Module):
         cos_similarity[cos_similarity != cos_similarity] = 0
         return cos_similarity
     
-    def encoder_graph(self, x):
+    def encode_graph(self, x):
         gru_output, _ = self.rnn(x)
         gru_output = gru_output[:, -1, :]
 
@@ -72,21 +85,75 @@ class SGA(nn.Module):
         similarity_mat = self.cal_cos_similarity(h_shared_info, h_shared_info)
         similarity_mat = similarity_mat * self.off_diagonal_mat
 
-        mask_column = torch.topk(similarity_mat, self.K, dim = 1)[1].reshape(1, -1) 
+        mask_column = torch.topk(torch.abs(similarity_mat), self.K, dim = 1)[1].reshape(1, -1) 
         mask = torch.zeros([self.individual_num, self.individual_num], device = x.device)
         mask[self.mask_row, mask_column] = 1
         topK_similarity_mat = similarity_mat * mask
         topK_similarity_mat = topK_similarity_mat[:, topK_similarity_mat.sum(0) != 0]
+
+        row_idx, col_idx = torch.where(topK_similarity_mat != 0)
+        concept_group = [[] for _ in range(topK_similarity_mat.shape[1])]
+        for i, j in zip(row_idx.tolist(), col_idx.tolist()):
+            concept_group[j].append(i)
         
+        sender_list = []
+        receiver_list = []
+        for nodes in concept_group:
+            if len(nodes) < 2:
+                continue
+            indices = torch.tensor(nodes, device=x.device)
+            senders, receivers = torch.combinations(indices, r=2).unbind(1)
+            sender_list.append(senders)
+            receiver_list.append(receivers)
+
         adj_mat = torch.zeros([self.individual_num, self.individual_num], device = x.device)
-        for concept_idx in range(topK_similarity_mat.shape[1]):
-            non_zero_idx = topK_similarity_mat[:, concept_idx]
-            connected_stocks = torch.where(non_zero_idx)[0]
-            for j, sender in enumerate(connected_stocks[:-1]):
-                receiver = connected_stocks[j+1]
-                adj_mat[sender, receiver] = 1
-                adj_mat[receiver, sender] = 1
+        if sender_list:
+            sender_all = torch.cat(sender_list)
+            receiver_all = torch.cat(receiver_list)
+            adj_mat[sender_all, receiver_all] = 1
+            adj_mat[receiver_all, sender_all] = 1  
+
         return adj_mat
+    
+    def encode_weighted_adj(self, x):
+        gru_output, _ = self.rnn(x)
+        gru_output = gru_output[:, -1, :]
+
+        h_shared_info = gru_output
+        similarity_mat = self.cal_cos_similarity(h_shared_info, h_shared_info)
+        similarity_mat = similarity_mat * self.off_diagonal_mat
+
+        mask_column = torch.topk(torch.abs(similarity_mat), self.K, dim = 1)[1].reshape(1, -1) 
+        mask = torch.zeros([self.individual_num, self.individual_num], device = x.device)
+        mask[self.mask_row, mask_column] = 1
+        topK_similarity_mat = similarity_mat * mask
+        topK_similarity_mat = topK_similarity_mat[:, topK_similarity_mat.sum(0) != 0]
+
+        row_idx, col_idx = torch.where(topK_similarity_mat != 0)
+        concept_group = [[] for _ in range(topK_similarity_mat.shape[1])]
+        for i, j in zip(row_idx.tolist(), col_idx.tolist()):
+            concept_group[j].append(i)
+        
+        sender_list = []
+        receiver_list = []
+        for nodes in concept_group:
+            if len(nodes) < 2:
+                continue
+            indices = torch.tensor(nodes, device=x.device)
+            senders, receivers = torch.combinations(indices, r=2).unbind(1)
+            sender_list.append(senders)
+            receiver_list.append(receivers)
+
+        w_adj = torch.zeros([self.individual_num, self.individual_num], device = x.device)
+        if sender_list:
+            sender_all = torch.cat(sender_list)
+            receiver_all = torch.cat(receiver_list)
+            w_adj[sender_all, receiver_all] = 1
+            w_adj[receiver_all, sender_all] = 1  
+            
+        w_adj = w_adj * torch.sign(similarity_mat)
+
+        return w_adj
     
     def forward(self, x):
         gru_output, _ = self.rnn(x)

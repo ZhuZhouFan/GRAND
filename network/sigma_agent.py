@@ -1,3 +1,14 @@
+"""
+Training agent for the SGA-based sigma (conditional variance) model.
+
+Inputs: sigma feature/label tensors via ``SGA_Dataset``, plus model
+hyperparameters (``N``, ``P``, ``hidden_dim``, ``K``, learning rate, device).
+Operations: MSE training with L1 regularization option, validation, logging,
+and early stopping (same loop structure as the quantile agent).
+Outputs: ``network_best.pth`` / ``network_final.pth`` under the provided
+``log_dir``.
+"""
+
 import os
 import time
 import numpy as np

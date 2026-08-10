@@ -115,10 +115,6 @@ class GRANDSimulation:
         Sigmas = np.zeros((self.N, self.N, self.T + self.burnin))
         graphs = np.zeros((self.N, self.N, self.T + self.burnin))
 
-        # pre_Sigmas = np.zeros((self.N, self.N, self.T + self.burnin))
-        # for t in range(self.T + self.burnin):
-        # np.fill_diagonal(pre_Sigmas[:, :, t], 1.0)
-
         pre_Sigmas = np.full((self.N, self.N, self.T + self.burnin), 0.25)
         diag_values = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.9, 1.0]
         for t in range(self.T + self.burnin):
@@ -208,7 +204,7 @@ def subjob(args, seed):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='GRAND Simulator Hyperparameters')
-    parser.add_argument('--N', type=int, default=200, help='Number of assets in the simulation')
+    parser.add_argument('--N', type=int, default=2000, help='Number of assets in the simulation')
     parser.add_argument('--T', type=int, default=600, help='Number of time periods for the simulation')
     parser.add_argument('--alpha', type=float, default=0.8, help='Alpha parameter, controlling the asset return dynamics')
     parser.add_argument('--beta', type=float, default=0.025, help='Beta parameter, influencing the asset correlation structure')
@@ -216,18 +212,14 @@ if __name__ == '__main__':
     parser.add_argument('--delta', type=float, default=0.2, help='Delta parameter, influencing the cross-sectional covariance')
     parser.add_argument('--zeta', type=float, default=0.2, help='Zeta parameter, controlling the correlation decay rate')
     parser.add_argument('--K', type=int, default=3, help='Number of top nodes used for adjacency matrix construction')
-    # parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
+    parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
     parser.add_argument('--burnin', type=int, default=100, help='Burn-in period to discard initial simulation data')
     parser.add_argument('--lag', type=int, default=48, help='Number of lagged values to use for each feature')
-    parser.add_argument('--rep', type=int, default=100, help='Number of Monte Carlo repetitions for the simulation')
+    # parser.add_argument('--rep', type=int, default=100, help='Number of Monte Carlo repetitions for the simulation')
     parser.add_argument('--cpu', type=int, default=20, help='Number of CPUs')
     args = parser.parse_args()
     
     # Parallel(n_jobs=args.cpu)(delayed(subjob)(args, seed) for seed in tqdm([x for x in range(args.rep)]))
     
-    for seed in tqdm([x for x in range(args.rep)]):
+    subjob(args, args.seed)
         
-        if seed < 2: 
-            continue
-        else:
-            subjob(args, seed)

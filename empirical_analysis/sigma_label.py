@@ -1,3 +1,14 @@
+"""
+Construct variance labels for the SGA-based sigma model.
+
+Inputs: QCM moment CSVs under ``{project_path}/moment/.../``; requires
+``--lr``, ``--hidden``, and ``--lag`` to match the upstream quantile run.
+Operations: for each date, read the horizon-aligned QCM variance target for
+every valid stock (missing values filled with 0).
+Outputs: ``{project_path}/sigma_tensor/hidden_*_lr_*_lag_*_horizon_*/{date}/label.npy``
+with shape ``[N, 1]``.
+"""
+
 import os
 import numpy as np
 import pandas as pd
@@ -5,7 +16,10 @@ from tqdm import tqdm
 import warnings
 import argparse
 from joblib import Parallel, delayed
-from feature import obtain_valid_stock_list
+
+import sys
+sys.path.append('.')
+from config import project_path, start_time, end_time, horizon, lag
 
 warnings.filterwarnings('ignore')
 
@@ -47,15 +61,12 @@ def one_day(date, data_path, moment_path, save_path, stock_list,
 if __name__ == '__main__':
     
     parser = argparse.ArgumentParser()
-    parser.add_argument('--lr', type=float, 
+    parser.add_argument('--lr', type=float, default=1e-4, 
                         help='Learning rate.')
-    parser.add_argument('--hidden', type=int, 
+    parser.add_argument('--hidden', type=int, default=128, 
                         help='Number of hidden units in encoder.')
-    parser.add_argument('--lag', type=int, 
+    parser.add_argument('--lag', type=int, default=lag,
                          help='Number of lagged value of each feature (S in the paper).')
-    
-    parser.add_argument('--data-folder', type=str, 
-                         help='Path to your data folder')
     args = parser.parse_args()
 
     start_time = '2010-01-01'
@@ -63,22 +74,17 @@ if __name__ == '__main__':
     
     lag_order = args.lag
     hidden_dim = args.hidden
-    horizon = 1
-    P = 31 + 4
-
-    data_path = args.data_folder
-    moment_path = f'{data_path}/moment/hidden_{hidden_dim}_lr_{args.lr}_lag_{args.lag}_horizon_1'
+    moment_path = f'{project_path}/moment/hidden_{hidden_dim}_lr_{args.lr}_lag_{args.lag}_horizon_{horizon}'
     
     skip_exsting = True
-    save_path = f'{data_path}/sigma_tensor/hidden_{hidden_dim}_lr_{args.lr}_lag_{args.lag}_horizon_1'
-    overall_description = pd.read_csv(f'{data_path}/overall_description.csv', index_col='order_book_id')
+    save_path = f'{project_path}/sigma_tensor/hidden_{hidden_dim}_lr_{args.lr}_lag_{args.lag}_horizon_{horizon}'
+    overall_description = pd.read_csv(f'{project_path}/overall_description.csv', index_col='order_book_id')
     sector_code_list = overall_description['sector_code'].unique().tolist()
-    industry_code_list = overall_description['industry_code'].unique().tolist()
 
-    index_week_data = pd.read_csv(f'{data_path}/kline_week_index/000001.XSHG.csv', index_col='date')
+    index_week_data = pd.read_csv(f'{project_path}/kline_week_index/000001.XSHG.csv', index_col='date')
     normal_week_array = (index_week_data.loc[start_time: end_time, :].index.values)
     
-    stock_list = obtain_valid_stock_list(f'{data_path}/kline_day', start_time, end_time)
+    stock_list = np.load(f'{project_path}/valid_stocks.npy', allow_pickle=True)
     
     for date in tqdm(normal_week_array[lag_order:-1], desc='construct label'):
         date_save_path = f'{save_path}/{date}'
@@ -87,4 +93,4 @@ if __name__ == '__main__':
         elif not os.path.exists(date_save_path):
                 os.makedirs(date_save_path)
 
-        one_day(date, data_path, moment_path, save_path, stock_list, normal_week_array, horizon, 30)
+        one_day(date, project_path, moment_path, save_path, stock_list, normal_week_array, horizon, 30)

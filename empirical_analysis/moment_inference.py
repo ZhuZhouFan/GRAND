@@ -1,15 +1,29 @@
+"""
+Run SGA quantile inference and construct per-stock QCM moment tables.
+
+Inputs: trained quantile checkpoints under ``{project_path}/quantile_model/...``
+and feature/label tensors; requires ``--lr``, ``--hidden``, ``--lag``, and
+``--cuda`` matching the trained model directory.
+Operations: load the best ``K`` per ``tau``, predict quantiles over the full
+sample window, screen quantiles with Kupiec/Christoffersen tests, and fit QCM
+regressions.
+Outputs: ``{project_path}/moment/hidden_*_lr_*_lag_*_horizon_{h}/{stock}.csv``
+and ``{project_path}/feasible_stock_list.npy``.
+"""
+
 import torch
 import pandas as pd
 from tqdm import tqdm
 import os
 import numpy as np
-import sys
 import argparse
 
+import sys
 sys.path.append('.')
-from config import project_path
+from config import project_path, start_time, valid_time, end_time, horizon, lag
 from network.model import SGA
 from network.QCM import compute_QCM_table
+from empirical_analysis.train_quantile import fetch_basic_attributes
 
 def isnumber(x):
     try:
@@ -18,7 +32,7 @@ def isnumber(x):
     except:
         return False
 
-def infer(N,
+def infer(N, 
           P, 
           hidden_dim,
           tau, 
@@ -26,7 +40,8 @@ def infer(N,
           stock_list,
           model_path,
           tensor_path,
-          graph=False):
+          graph=False,
+          weighted_adj=False):
     T = date_array.shape[0]
     K_df = pd.read_csv(f'{model_path}/{tau}/K_result.csv')
     K = K_df.loc[K_df['best_score'].argmin(), 'K']
@@ -46,7 +61,8 @@ def infer(N,
     mat_dict = dict.fromkeys(date_array, 0)
 
     for date in date_array:
-        result_dict[date] = pd.DataFrame(columns=['date', 'c_code', tau, 'ground_truth'])
+        result_dict[date] = pd.DataFrame(
+            columns=['date', 'c_code', tau, 'ground_truth'])
         result_dict[date]['c_code'] = stock_list
         result_dict[date]['date'] = date
 
@@ -62,9 +78,11 @@ def infer(N,
                 result_dict[date]['ground_truth'] = label_tensor[:, 0]
             except FileNotFoundError:
                 result_dict[date]['ground_truth'] = np.nan
-            
             if graph:
-                mat_dict[date] = network.encoder_graph(X).cpu().numpy()
+                if weighted_adj:
+                    mat_dict[date] = network.encode_weighted_adj(X).cpu().numpy()
+                else:
+                    mat_dict[date] = network.encode_graph(X).cpu().numpy()
 
     result_df = pd.concat(result_dict.values(), axis=0)
     return result_df, mat_dict, K
@@ -74,45 +92,46 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--lr', type=float, default=5e-4, 
+    parser.add_argument('--lr', type=float, default=1e-4, 
                         help='Learning rate.')
-    parser.add_argument('--lag', type=int, default=48, 
+    parser.add_argument('--lag', type=int, default=lag,
                         help='Number of lagged value of each feature')
-    parser.add_argument('--hidden', type=int, default=64,
+    parser.add_argument('--hidden', type=int, default=128, 
                         help='Number of hidden units in encoder.')
 
-    parser.add_argument('--N', type=int, default=2000, help='Number of assets in the simulation')
-    parser.add_argument('--T', type=int, default=600, help='Number of time periods for the simulation')
-    parser.add_argument('--K', type=int, default=3, help='Number of top nodes used for adjacency matrix construction')
-    parser.add_argument('--dseed', type=int, default=0, help='Random seed for DGP')
-    parser.add_argument('--cuda', type=int, default=0, help='Number of GPU device training on.')
+    parser.add_argument('--cuda', type=int, default=0, 
+                        help='No. of GPU device.')
     args = parser.parse_args()
 
     torch.cuda.set_device(args.cuda)
+
+    hidden_dim = args.hidden
     
-    model_path = f'{project_path}/simulated_quantile_model/{args.N}_{args.T}_{args.K}_{args.dseed}/hidden_{args.hidden}_lr_{args.lr}_lag_{args.lag}_horizon_1'
-    tensor_path = f'{project_path}/simulated_tensor/{args.N}_{args.T}_{args.K}_{args.dseed}'
-    moment_path = f'{project_path}/simulated_moment/{args.N}_{args.T}_{args.K}_{args.dseed}/hidden_{args.hidden}_lr_{args.lr}_lag_{args.lag}_horizon_1'
+    model_path = f'{project_path}/quantile_model/hidden_{hidden_dim}_lr_{args.lr}_lag_{args.lag}_horizon_{horizon}'
+    tensor_path = f'{project_path}/tensor/lag_{args.lag}_horizon_{horizon}'
+    moment_path = f'{project_path}/moment/hidden_{hidden_dim}_lr_{args.lr}_lag_{args.lag}_horizon_{horizon}'
+    N, P, _ = fetch_basic_attributes(tensor_path, start_time, end_time)
     tolerance = 20
     size = 0.01
 
-    if not os.path.exists(moment_path):
-        os.makedirs(moment_path)
+    os.makedirs(moment_path, exist_ok=True)
 
     tau_list = os.listdir(model_path)
     tau_list.sort()
     tau_list = [float(x) for x in tau_list if isnumber(x)]
 
     date_list = os.listdir(tensor_path)
-    date_array = np.array([int(x) for x in date_list])
-    date_array.sort()
-    stock_list = [f'stock_{x}' for x in range(2000)] # use integers to represent stock ids.
-    
+    date_list.sort()
+    date_array = np.array(date_list)
+    date_array = date_array[(date_array >= start_time) & (date_array <= end_time)]
+
+    stock_list = np.load(f'{project_path}/valid_stocks.npy', allow_pickle=True)
+
     inference_dict = dict.fromkeys(tau_list, 0)
     for tau in tqdm(tau_list, desc='inference'):
-        result_df, mat_dict, K = infer(N=args.N,
-                                       P=4,
-                                       hidden_dim=args.hidden,
+        result_df, mat_dict, K = infer(N=N,
+                                       P=P,
+                                       hidden_dim=hidden_dim,
                                        tau=tau,
                                        date_array=date_array,
                                        stock_list=stock_list,
@@ -121,6 +140,7 @@ if __name__ == '__main__':
                                        graph=False)
         inference_dict[tau] = result_df
 
+    feasible_stock_list = []
     for stock_name in tqdm(stock_list, desc='QCM regression'):
         try:
             df = compute_QCM_table(stock_name,
@@ -128,8 +148,11 @@ if __name__ == '__main__':
                                    tau_list,
                                    tolerance=tolerance,
                                    size=size,
-                                   start_time=0,
-                                   valid_time=399)
+                                   start_time=start_time,
+                                   valid_time=valid_time)
             df.to_csv(f'{moment_path}/{stock_name}.csv')
+            feasible_stock_list.append(stock_name)
         except Exception as e:
             print(f'{stock_name} {e}')
+
+    np.save(f'{project_path}/feasible_stock_list.npy', np.array(feasible_stock_list))

@@ -1,3 +1,13 @@
+"""
+PyTorch dataset for date-indexed cross-sectional GRAND tensors.
+
+Inputs: a tensor root directory whose subfolders are dates, each containing
+``feature.npy`` and ``label.npy``; inclusive ``start_time`` / ``end_time``
+filters select the sample window.
+Operations: list and sort valid dates, then load one cross-section per index.
+Outputs: ``(feature, label)`` tensors with shapes ``[N, S, P]`` and ``[N, 1]``.
+"""
+
 import os
 import torch
 from torch.utils.data import Dataset

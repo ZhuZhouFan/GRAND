@@ -1,14 +1,26 @@
+"""
+Construct lagged cross-sectional feature tensors for SGA quantile / mean models.
+
+Inputs: ``valid_stocks.npy``, weekly kline / basic-factor / macro CSVs, sector
+metadata in ``overall_description.csv``, and the weekly index calendar.
+Operations: assemble per-stock lagged panels (market, fundamentals, macro,
+sector dummies), apply train-window min-max normalization, and stack stocks.
+Outputs: ``{project_path}/tensor/lag_{S}_horizon_{h}/{date}/feature.npy`` with
+shape ``[N, S, P]`` (default ``P=31``).
+"""
+
 import os
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-# import warnings
 import argparse
 from joblib import Parallel, delayed
-
-# warnings.filterwarnings('ignore')
+import sys
+sys.path.append('.')
+from config import project_path, start_time, end_time, horizon, lag, P
 
 def isnumber(x):
+    """Check if a value is a number."""
     try:
         float(x)
         return False
@@ -18,26 +30,13 @@ def isnumber(x):
 def min_max_normal(df, 
                    start_time='2010-01-01',
                    end_time='2018-12-31'):
+    """Normalize the data to the range [0, 1] via min-max normalization."""
     max_value = df.loc[start_time:end_time, :].max()
     min_value = df.loc[start_time:end_time, :].min()
     return (df - min_value)/(max_value - min_value)
-
-def obtain_valid_stock_list(kline_day_path, start_time, end_time,
-                            null_patience = 0.20):
-    existing_stock_list = os.listdir(kline_day_path)
-    existing_stock_list = [x[:-4] for x in existing_stock_list]
-    existing_stock_list.sort()
-    
-    valid_stock_list = []
-    for stock_name in existing_stock_list:
-        df = pd.read_csv(f'{kline_day_path}/{stock_name}.csv', index_col = 'date')
-        df.loc[(df['volume'] < 1)|(df['total_turnover'] < 1), :] = np.nan
-        df = df.loc[start_time:end_time, :]
-        if (df.isna().sum().max()) < (null_patience * df.shape[0]):
-            valid_stock_list.append(stock_name)
-    return np.array(valid_stock_list)
     
 def extract_feature(stock_name, date, previous_date, data_path, index_data, overall_description):
+    """Construct the feature matrix X_i,t for a given stock at a given date."""
     kline_data = pd.read_csv(
         f'{data_path}/kline_week/{stock_name}.csv', index_col='date')
     basic_data = pd.read_csv(
@@ -56,22 +55,17 @@ def extract_feature(stock_name, date, previous_date, data_path, index_data, over
     kline_data['index_log_total_turnover'] = np.log(index_data['total_turnover'] + 1e-6)
     kline_data['excess_ret'] = kline_data['ret'] - kline_data['index_ret']
     
-    # apply logorithm operation to some big values
     basic_data['a_share_market_val_in_circulation'] = np.log(basic_data['a_share_market_val_in_circulation'] + 1e-6)
     
-    # volume, total_turnover, num_trades
     kline_factor_list = ['open', 'high', 'close', 'low', 'log_volume',
                          'log_total_turnover', 'log_num_trades', 'log_ret', 'excess_ret',
                          'index_ret', 'index_log_volume', 'index_log_total_turnover']
-    # a_share_market_val_in_circulation
     basic_factor_list = ['a_share_market_val_in_circulation', 'du_return_on_equity_ttm',
                          'inc_revenue_ttm', 'total_asset_turnover_ttm', 'debt_to_asset_ratio_ttm']
-    # macro economy
+    
     macro_factor_list = ['treasury_bond', 'industrial', 'social_finance']
-    # sector dummy
     sector_dummy = ['Financials', 'RealEstate', 'HealthCare', 'Industrials', 'Materials', 'ConsumerDiscretionary',
                     'ConsumerStaples', 'InformationTechnology', 'Utilities', 'TelecommunicationServices', 'Energy']
-    # insert value
     selected_data = pd.DataFrame(columns=kline_factor_list + basic_factor_list + macro_factor_list + sector_dummy,
                                  index = index_data.loc[previous_date:date, :].index.values)
     
@@ -93,6 +87,7 @@ def extract_feature(stock_name, date, previous_date, data_path, index_data, over
     # remove abnormal value
     selected_data[selected_data.map(isnumber)] = np.nan
     selected_data[np.isinf(selected_data)] = np.nan
+    
     # deal with nan
     selected_data.ffill(inplace=True)
     selected_data.fillna(0.5, inplace=True)
@@ -102,6 +97,7 @@ def extract_feature(stock_name, date, previous_date, data_path, index_data, over
 def one_day(date, data_path, save_path, index_data, 
             stock_list, overall_description, date_array,
             num_worker=20):
+    """Construct the cross-sectional feature tensor X_t for a given date."""
     previous_date = date_array[np.where(date_array == date)[0].item() - lag_order + 1]
 
     one_day_list = Parallel(n_jobs=num_worker)(delayed(extract_feature)
@@ -123,30 +119,19 @@ def one_day(date, data_path, save_path, index_data,
 if __name__ == '__main__':
     
     parser = argparse.ArgumentParser()
-    parser.add_argument('--lag', type=int, 
+    parser.add_argument('--lag', type=int, default=lag,
                          help='Number of lagged value of each feature (S in the paper).')
-    parser.add_argument('--data-folder', type=str, 
-                         help='Path to your data folder')
     args = parser.parse_args()
     
-    data_path = args.data_folder
     lag_order = args.lag
-    
-    start_time = '2010-01-01'
-    valid_time = '2018-12-31'
-    end_time = '2022-07-31'
-    horizon = 1
-    P = 31
     skip_exsting = True
     
-    save_path = f'{data_path}/tensor/lag_{lag_order}_horizon_{horizon}'
-    overall_description = pd.read_csv(f'{data_path}/overall_description.csv', index_col='order_book_id')
-    sector_code_list = overall_description['sector_code'].unique().tolist()
-    industry_code_list = overall_description['industry_code'].unique().tolist()
+    save_path = f'{project_path}/tensor/lag_{lag_order}_horizon_{horizon}'
+    overall_description = pd.read_csv(f'{project_path}/overall_description.csv', index_col='order_book_id')
 
-    index_week_data = pd.read_csv(f'{data_path}/kline_week_index/000001.XSHG.csv', index_col='date')
+    index_week_data = pd.read_csv(f'{project_path}/kline_week_index/000001.XSHG.csv', index_col='date')
     normal_week_array = (index_week_data.loc[start_time: end_time, :].index.values)
-    stock_list = obtain_valid_stock_list(f'{data_path}/kline_day', start_time, valid_time, 0.20)
+    stock_list = np.load(f'{project_path}/valid_stocks.npy', allow_pickle=True)
 
     for date in tqdm(normal_week_array[lag_order:], desc='construct feature'):
         date_save_path = f'{save_path}/{date}'
@@ -155,6 +140,6 @@ if __name__ == '__main__':
         elif not os.path.exists(date_save_path):
             os.makedirs(date_save_path)
 
-        one_day(date, data_path, save_path, index_week_data,
+        one_day(date, project_path, save_path, index_week_data,
                 stock_list, overall_description, normal_week_array,
                 num_worker=50)

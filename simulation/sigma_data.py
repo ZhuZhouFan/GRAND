@@ -16,9 +16,9 @@ if __name__ == '__main__':
     parser.add_argument('--K', type=int, default=3, help='Number of top nodes used for adjacency matrix construction')
     parser.add_argument('--dseed', type=int, default=0, help='Random seed for DGP')
     
-    parser.add_argument('--lr', type=float, default=5e-4, 
+    parser.add_argument('--lr', type=float, default=1e-4, 
                         help='Learning rate.')
-    parser.add_argument('--hidden', type=int, default=64,
+    parser.add_argument('--hidden', type=int, default=128,
                         help='Number of hidden units in encoder.')
     parser.add_argument('--lag', type=int, default=48,
                         help='Number of lagged value of each feature')

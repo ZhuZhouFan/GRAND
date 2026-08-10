@@ -1,3 +1,15 @@
+"""
+QCM: recover conditional moments from quantiles.
+
+Inputs: per-``tau`` inference tables (date, stock, quantile, ground truth) and
+optional Kupiec/Christoffersen screening settings.
+Operations: rearrange quantiles by stock, screen unreliable ``tau`` levels on
+the in-sample window, and regress quantiles on Hermite-style design columns to
+obtain mean, variance, skewness, and kurtosis.
+Outputs: QCM tables (DataFrame or per-stock CSV) used by sigma features/labels
+and covariance estimation.
+"""
+
 import pandas as pd
 from scipy import stats
 import numpy as np
@@ -36,10 +48,6 @@ def test(quantile_df, tau_list, size, start_time, valid_time):
     # Kupic and Christerfo test
     selected_tau_list = []
     df_train = quantile_df.loc[start_time:valid_time, :]
-    # 这个版本里，确实会有问题。
-    # 因为feature中可能出现一个问题，有些股票是在valid_time之后才被选入zz1000的成分股
-    # 暂时设了个阈值，起码有30个数据吧，不然检验会失效的很厉害
-    # 小于30个数据的直接不做检验了
     if df_train.shape[0] < 30:
         return quantile_df[tau_list + ['ground_truth']].copy()
     for tau in tau_list:
@@ -47,7 +55,7 @@ def test(quantile_df, tau_list, size, start_time, valid_time):
             continue
         Kupic_stat = Kupic_test(df_train[tau], df_train['ground_truth'], tau)
         Christofer_stat = Christofer_test(df_train[tau], df_train['ground_truth'], tau)
-        if ((Kupic_stat < stats.chi2.isf(size, 1)) | (Christofer_stat < stats.chi2.isf(size, 2))):
+        if ((Kupic_stat < stats.chi2.isf(size, 1)) and (Christofer_stat < stats.chi2.isf(size, 2))):
             selected_tau_list.append(tau)
     selected_df = quantile_df[selected_tau_list + [0.0, 'ground_truth']].copy()
     return selected_df
