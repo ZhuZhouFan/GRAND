@@ -35,7 +35,7 @@ This paper relies on commercial / subscription data. Raw inputs are **not** redi
 **How to obtain (manual download).**
 
 1. **Wind / CSMAR.** Through an institutional Wind or CSMAR terminal / API account, export for all A-share stocks listed on the Shanghai and Shenzhen exchanges over 2010-01-01–2022-07-31: daily and weekly prices/volumes, weekly fundamentals used as features, market-index klines, sector classification, and the bond / macro series listed above. Save one CSV per stock (or index) using the exchange ticker as the filename (e.g. `000001.XSHE.csv`, `000001.XSHG.csv` for the Shanghai Composite). Aggregate the three weekly macro series into `macro_data/macro_economy_week.csv`.
-2. **CEIC.** From the CEIC database, download the monthly China Macro-economic Climate Index and save it as `macro_data/CEIC_macro.csv` with columns `date` (`mm/YYYY`) and `index`. This file is required only for the business-cycle analysis (`empirical_analysis/bussiness_cycle.py`).
+2. **CEIC.** From the CEIC database, download the monthly China Macro-economic Climate Index and save it as `macro_data/CEIC_macro.csv` with columns `date` (`mm/YYYY`) and `index`. This file is required only for the business-cycle analysis (`empirical_analysis/business_cycle.py`).
 3. **PKU factors.** Download the monthly Chinese equity factor file from [https://www.gsm.pku.edu.cn/finvc/info/1027/1147.htm](https://www.gsm.pku.edu.cn/finvc/info/1027/1147.htm) and save it as `factors_monthly_2023.xlsx`. Required for `baselines/factor_model.py` (and factor-demeaned DCC baselines).
 
 After download, the raw tree should look like:
@@ -258,8 +258,8 @@ python empirical_analysis/Markowitz_portfolio.py --method GRAND
 python empirical_analysis/extract_graph.py
 python empirical_analysis/system_connectedness.py
 python empirical_analysis/weekly_catfin.py
-python empirical_analysis/spoilover_index.py
-python empirical_analysis/bussiness_cycle.py
+python empirical_analysis/spillover_index.py
+python empirical_analysis/business_cycle.py
 ```
 
 

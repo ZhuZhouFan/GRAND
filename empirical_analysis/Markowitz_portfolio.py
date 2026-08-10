@@ -165,7 +165,6 @@ def compute_pm(table, risk_free = 0.023):
     turnover = table[f'turnover'].mean()
     calmar_ratio = annual_ret/max_dd
     
-    # 打印各项指标
     print(f"annual return: {100 * annual_ret:.2f}%")
     print(f"annual risk: {100 * annual_risk:.2f}%")
     print(f"win rate: {100 * win_rate:.2f}%")

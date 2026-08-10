@@ -62,8 +62,8 @@ python empirical_analysis/Markowitz_portfolio.py --method GRAND
 python empirical_analysis/extract_graph.py
 python empirical_analysis/system_connectedness.py
 python empirical_analysis/weekly_catfin.py
-python empirical_analysis/spoilover_index.py
-python empirical_analysis/bussiness_cycle.py
+python empirical_analysis/spillover_index.py
+python empirical_analysis/business_cycle.py
 
 # Competing methods
 python baselines/factor_model.py --method FF3

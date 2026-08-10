@@ -3,7 +3,7 @@ Business-cycle predictive regressions for GRAND connectedness measures.
 
 Inputs:
   - Pipeline: ``Q_graph.npy``, ``V_graph.npy`` from ``extract_graph.py``;
-    ``spillover_index_{tau}.csv`` from ``spoilover_index.py``; stock /
+    ``spillover_index_{tau}.csv`` from ``spillover_index.py``; stock /
     sector / basic-factor panels already used upstream.
   - External (place under ``{project_path}`` before running):
       * ``macro_data/CEIC_macro.csv`` — monthly macro index (``date`` as
@@ -15,7 +15,7 @@ Operations: build monthly DGC / spillover predictors and controls (CATFIN,
 term spread, relative rate, market and financial moments, CEIC leads/lags),
 run Newey-West OLS for horizons 1..12, and plot coefficient paths.
 Outputs: printed R^2 / CIs and
-``empirical_analysis/figures/bussiness_cycle_analysis.png``.
+``empirical_analysis/figures/business_cycle_analysis.png``.
 """
 
 import os
@@ -30,11 +30,11 @@ sys.path.append('.')
 from config import project_path, valid_time, end_time
 from empirical_analysis.weekly_catfin import SGED
 
-def load_spoilover_index(project_path, tau=0.05):
-    spoilover_df = pd.read_csv(f'{project_path}/macro_data/spillover_index_{tau}.csv', index_col='date')
-    spoilover_df.index = pd.to_datetime(spoilover_df.index, format='%Y-%m-%d')
-    spoilover_df = spoilover_df.resample('ME').last()
-    return spoilover_df.rename(columns={'index': 'SPILLOVER_INDEX'})
+def load_spillover_index(project_path, tau=0.05):
+    spillover_df = pd.read_csv(f'{project_path}/macro_data/spillover_index_{tau}.csv', index_col='date')
+    spillover_df.index = pd.to_datetime(spillover_df.index, format='%Y-%m-%d')
+    spillover_df = spillover_df.resample('ME').last()
+    return spillover_df.rename(columns={'index': 'SPILLOVER_INDEX'})
 
 def calculate_TREM(project_path):
     bond10y_df = pd.read_csv(f'{project_path}/10Y_Bond.csv', index_col = 'date')
@@ -174,10 +174,10 @@ if __name__ == "__main__":
     dgc_df = dgc_df.resample('ME').mean()
 
     # load spillover index data
-    spoilover_df = load_spoilover_index(project_path, tau=0.05)
+    spillover_df = load_spillover_index(project_path, tau=0.05)
     
     # combine all indices
-    all_indices_df = pd.concat([dgc_df, spoilover_df], axis=1)
+    all_indices_df = pd.concat([dgc_df, spillover_df], axis=1)
     
     # process the control variables
     control_df = pd.DataFrame(index = ceic_index.index,
@@ -303,7 +303,7 @@ if __name__ == "__main__":
 
     fig_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'figures')
     os.makedirs(fig_dir, exist_ok=True)
-    output_filename = os.path.join(fig_dir, 'bussiness_cycle_analysis.png')
+    output_filename = os.path.join(fig_dir, 'business_cycle_analysis.png')
     plt.savefig(output_filename, dpi=300, bbox_inches='tight')
     plt.close()
 

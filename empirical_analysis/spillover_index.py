@@ -9,7 +9,7 @@ Operations: aggregate daily closes to monthly returns, fit a quantile VAR with
 factors on a rolling in-sample window, and compute the FEVD spillover index
 at each OOS month.
 Outputs: ``{project_path}/macro_data/spillover_index_{tau}.csv`` consumed by
-``bussiness_cycle.py``.
+``business_cycle.py``.
 """
 
 import argparse
