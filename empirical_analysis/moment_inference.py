@@ -5,8 +5,8 @@ Inputs: trained quantile checkpoints under ``{project_path}/quantile_model/...``
 and feature/label tensors; requires ``--lr``, ``--hidden``, ``--lag``, and
 ``--cuda`` matching the trained model directory.
 Operations: load the best ``K`` per ``tau``, predict quantiles over the full
-sample window, screen quantiles with Kupiec/Christoffersen tests, and fit QCM
-regressions.
+sample window, optionally screen quantiles with Kupiec/Christoffersen tests
+(``--screen-quantiles``, default on), and fit QCM regressions.
 Outputs: ``{project_path}/moment/hidden_*_lr_*_lag_*_horizon_{h}/{stock}.csv``
 and ``{project_path}/feasible_stock_list.npy``.
 """
@@ -22,7 +22,7 @@ import sys
 sys.path.append('.')
 from config import project_path, start_time, valid_time, end_time, horizon, lag
 from network.model import SGA
-from network.QCM import compute_QCM_table
+from network.QCM import QCM_regression, compute_QCM_table, re_arrange
 from empirical_analysis.train_quantile import fetch_basic_attributes
 
 def isnumber(x):
@@ -101,6 +101,16 @@ if __name__ == '__main__':
 
     parser.add_argument('--cuda', type=int, default=0, 
                         help='No. of GPU device.')
+    parser.add_argument('--tolerance', type=int, default=20,
+                        help='Min QCM column count after Kupiec/Christoffersen screening.')
+    parser.add_argument(
+        '--screen-quantiles',
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help='Screen τ levels with Kupiec/Christoffersen tests before QCM '
+             '(default: on). Pass --no-screen-quantiles to keep every estimated '
+             'quantile. Empirical reproduction should leave screening on.',
+    )
     args = parser.parse_args()
 
     torch.cuda.set_device(args.cuda)
@@ -111,7 +121,7 @@ if __name__ == '__main__':
     tensor_path = f'{project_path}/tensor/lag_{args.lag}_horizon_{horizon}'
     moment_path = f'{project_path}/moment/hidden_{hidden_dim}_lr_{args.lr}_lag_{args.lag}_horizon_{horizon}'
     N, P, _ = fetch_basic_attributes(tensor_path, start_time, end_time)
-    tolerance = 20
+    tolerance = args.tolerance
     size = 0.01
 
     os.makedirs(moment_path, exist_ok=True)
@@ -140,19 +150,31 @@ if __name__ == '__main__':
                                        graph=False)
         inference_dict[tau] = result_df
 
+    if not args.screen_quantiles:
+        print('Skipping Kupiec/Christoffersen screening; using all estimated quantiles')
+
     feasible_stock_list = []
     for stock_name in tqdm(stock_list, desc='QCM regression'):
         try:
-            df = compute_QCM_table(stock_name,
-                                   inference_dict,
-                                   tau_list,
-                                   tolerance=tolerance,
-                                   size=size,
-                                   start_time=start_time,
-                                   valid_time=valid_time)
+            if args.screen_quantiles:
+                df = compute_QCM_table(stock_name,
+                                       inference_dict,
+                                       tau_list,
+                                       tolerance=tolerance,
+                                       size=size,
+                                       start_time=start_time,
+                                       valid_time=valid_time)
+            else:
+                stock_df = re_arrange(stock_name, tau_list, inference_dict)
+                stock_df.set_index('date', inplace=True)
+                quantile_df = stock_df.drop(columns=['c_code'], errors='ignore')
+                df = QCM_regression(quantile_df)
             df.to_csv(f'{moment_path}/{stock_name}.csv')
             feasible_stock_list.append(stock_name)
         except Exception as e:
             print(f'{stock_name} {e}')
 
+    print(
+        f'QCM feasible stocks: {len(feasible_stock_list)}/{len(stock_list)}'
+    )
     np.save(f'{project_path}/feasible_stock_list.npy', np.array(feasible_stock_list))

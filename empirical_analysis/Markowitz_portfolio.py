@@ -27,7 +27,7 @@ def optimal_portfolio(ret_vec: np.ndarray,
                       cov_mat: np.ndarray,
                       max_weight: float = 0.1,
                       min_weight: float = 0.0,
-                      iter_num: int = 100,
+                      iter_num: int = 10,
                       quadratic: bool = True) -> dict:
     solvers.options['show_progress'] = False
     n = ret_vec.shape[0]
@@ -103,7 +103,7 @@ def backtest_with_optimal_weights(mean_matrix:pd.DataFrame,
                                   backtest_array:np.array,
                                   min_weight:float = 0.0,
                                   max_weight:float = 0.1,
-                                  iter_num:int = 10,
+                                  iter_num:int = 500,
                                   trade_fee:float = 0.002):
     previous_weights = pd.DataFrame(columns=mean_matrix.columns, index = backtest_array)
     previous_weights.index.name = 'date'
@@ -180,6 +180,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--max', type = float, default=0.05)
     parser.add_argument('--min', type = float, default=0.0)
+    parser.add_argument('--iter-num', type=int, default=500)
     
     parser.add_argument('--method', type = str)
     args = parser.parse_args()
@@ -224,7 +225,7 @@ if __name__ == '__main__':
                                                                   oos_dates,
                                                                   min_weight=args.min,
                                                                   max_weight=args.max,
-                                                                  iter_num=10)
+                                                                  iter_num=args.iter_num)
      
      
     print(f'Backtesting {method_type} method')

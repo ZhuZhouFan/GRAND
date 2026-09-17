@@ -256,6 +256,16 @@ if __name__ == '__main__':
         try:
             pd_correlation_mat = nearcorr(correlation_mat, max_iterations=1000)
             pd_covariance_mat = cor2cov(pd_correlation_mat, np.diagonal(covariance_mat))
-            np.save(f'{cov_path}/{date}_cov.npy', pd_covariance_mat)
         except Exception as e:
-            print(e)
+            print(
+                f'{date}: NCM failed after max iterations ({e}); '
+                'using diagonal covariance fallback'
+            )
+            pd_covariance_mat = np.diag(np.diagonal(diagonal_elements))
+
+        np.save(f'{cov_path}/{date}_cov.npy', pd_covariance_mat)
+        mean_vec = np.zeros(len(feasible_stock_list))
+        for stock_indice, stock_name in enumerate(feasible_stock_list):
+            tem = pd.read_csv(f'{moment_path}/{stock_name}.csv', index_col='date')
+            mean_vec[stock_indice] = tem.loc[date, 'mean']
+        np.save(f'{cov_path}/{date}_mean.npy', mean_vec)
